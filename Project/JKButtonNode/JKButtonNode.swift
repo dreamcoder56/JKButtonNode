@@ -34,29 +34,29 @@ public enum JKButtonState {
     /**The normal, or default state of a button—that is, enabled but not highlighted.*/
     case normal
     
-    /**Highlighted state of a button. A button becomes highlighted when a touch event 
-     enters the button's bounds, and it loses that highlight when there is a touch-up 
+    /**Highlighted state of a button. A button becomes highlighted when a touch event
+     enters the button's bounds, and it loses that highlight when there is a touch-up
      event or when the touch event exits the button's bounds.*/
     case highlighted
     
-    /**Disabled state of a button. User interactions with disabled button have no effect 
+    /**Disabled state of a button. User interactions with disabled button have no effect
      and the control draws itself with a specific background noting it's disabled.*/
     case disabled
 }
 
 /**A JKButtonNode is used to display a button in SpriteKit that is composed of an SKSpriteNode and an SKLabelNode.*/
 class JKButtonNode: SKSpriteNode {
-
+    
     //--------------------
     //-----Properties-----
     //--------------------
     /**Whether to allow the button to be pressed. Setting it to false will also assign the correct background image
-       and the button's state to disabled.*/
-    var enabled = true {
-        didSet {
-            enabled ? set(state: .normal) : (canChangeState ? set(state: .disabled): set(state: .normal))
-        }
-    }
+     and the button's state to disabled.*/
+    var enabled = true //{
+    //didSet {
+    //   enabled ? set(state: .normal) : (canChangeState ? set(state: .disabled): set(state: .normal))
+    // }
+    //  }
     
     /**Prevents the button from calling its action property when pressed. A custom action can be done
      by calling containsPoint on the button itself inside the touch functions and passing the user's touch.
@@ -71,17 +71,18 @@ class JKButtonNode: SKSpriteNode {
     var canPlaySounds = true
     
     /**Whether the button can change states when pressed or disabled.
-       This will not change the current background of the button.*/
+     This will not change the current background of the button.*/
     var canChangeState = true
     
     //BUG: Having empty strings will play any random sound file even when checking
     //if the strings are empty.
     /**The sound that is played when the user releases the button.*/
-    var normalSound = ""
+    var releasedSounds = ""
+    var pressedSound = ""
     
     /**The sound that is played when the user attempts to touch a disabled button.*/
     var disabledSound = ""
-
+    
     /**The function to call after the button has been pressed successfully.*/
     var action:((_ sender: JKButtonNode) -> Void)?
     
@@ -91,22 +92,26 @@ class JKButtonNode: SKSpriteNode {
     /**The string that the button displays.*/
     var title: SKLabelNode!
     
-    /**The default background of the button when there is no interaction. 
-       All other button states will be assigned this image unless otherwise specified.*/
+    /**The default background of the button when there is no interaction.
+     All other button states will be assigned this image unless otherwise specified.*/
     var normalBG = SKTexture(imageNamed: "")
     
     /**The background of the button when it has been pressed.*/
-    var highlightedBG = SKTexture(imageNamed: "")
+    var highlightedBG : SKTexture? = nil
     
     /**The background of the button when the button is not allowed to be pressed.*/
     var disabledBG = SKTexture(imageNamed: "")
     
+    /**Bounce of button when pressed**/
     
+    var buttonPressedAnimation : SKAction? = nil
+    
+    var reversedButtonAnimation : SKAction? = nil
     //----------------------
     //-----Initializers-----
     //----------------------
     /**Initializes a new button with just a background and no title.
-       You can declare the button's action later if you choose not to at initialization.*/
+     You can declare the button's action later if you choose not to at initialization.*/
     init(backgroundNamed name: String, action: ((_ button: JKButtonNode) -> Void)? = nil) {
         self.title = SKLabelNode(text: "")
         self.action = action
@@ -115,7 +120,7 @@ class JKButtonNode: SKSpriteNode {
     }
     
     /**Initializes a new button with a specific background for the specified state.
-       You can declare the button's action later if you choose not to at initialization.*/
+     You can declare the button's action later if you choose not to at initialization.*/
     init(backgroundNamed name: String, state: JKButtonState, action: ((_ button: JKButtonNode) -> Void)? = nil) {
         self.title = SKLabelNode(text: "")
         self.action = action
@@ -125,7 +130,7 @@ class JKButtonNode: SKSpriteNode {
     }
     
     /**Initializes a new button with a title and specified state.
-       You can set the state backgrounds by calling setStateBackgrounds on the button.*/
+     You can set the state backgrounds by calling setStateBackgrounds on the button.*/
     init(title: String, state: JKButtonState, action: ((_ button: JKButtonNode) -> Void)? = nil) {
         self.title = SKLabelNode(text: title)
         self.action = action
@@ -178,9 +183,10 @@ class JKButtonNode: SKSpriteNode {
     //-------------------------
     //Shared function to be used by initializers only
     fileprivate func finalizeInit(state: JKButtonState, background: SKTexture?) {
-        set(state: state)
+        set( state, andBackground: background! )
         
         guard let title = self.title else { return }
+        setupAnimations()
         assignTitleProperties()
         title.zPosition = 10
         addChild(title)
@@ -188,31 +194,66 @@ class JKButtonNode: SKSpriteNode {
         isUserInteractionEnabled = true
     }
     
+    fileprivate func setupAnimations(){
+        
+        
+        
+            var buttonPressedAction = SKAction.scale(to: 1.1, duration: 0.1)
+            var buttonUnPressedAction = SKAction.sequence([SKAction.scale(to: 0.9, duration: 0.05), SKAction.scale(to: 1.1, duration: 0.05), SKAction.scale(to: 1.0, duration: 0.05)])
+        
+        
+        
+            self.buttonPressedAnimation = buttonPressedAction
+            self.reversedButtonAnimation = buttonUnPressedAction
+        
+
+
+    }
+    
     //Assigns default values for the title.
     fileprivate func assignTitleProperties(fontName name: String? = "Chalkduster", size: CGFloat = 50, color: UIColor = UIColor.black) {
         title.fontName = name
         title.fontColor = color
         title.fontSize = size
-
+        
         //This equation is used to center the label vertically when the font size is changed
         title.position = centerTitlePosition()
     }
+
     
     //Set the current state of the button with the specified background.
-    fileprivate func set(_ state: JKButtonState, andBackground background: SKTexture) {
-        self.state = state
+    func set(_ state: JKButtonState, andBackground background: SKTexture?) {
+        
+        
         switch state {
         case .normal:
-            normalBG = background
+            normalBG = background!
             self.texture = normalBG
+            
+            
+            if let action = self.reversedButtonAnimation {
+                self.removeAction(forKey: "highAni")
+                self.run(action)}
+            
         case .highlighted:
             highlightedBG = background
-            self.texture = highlightedBG
+            if background != nil { self.texture = highlightedBG }
+            
+            if let action = self.buttonPressedAnimation {
+                self.run(action,withKey: "highAni")
+                
+                
+            }
         case .disabled:
-            disabledBG = background
-            self.texture = disabledBG
+            
+            self.texture = background!
+            
+            
+            
             enabled = false
         }
+        
+        self.state = state
     }
     
     //Check to make sure that the sounds have been set before trying to play any.
@@ -220,6 +261,8 @@ class JKButtonNode: SKSpriteNode {
         sound.isEmpty ? print("Failed to play button sound because it has not been set.")
             : run(SKAction.playSoundFileNamed(sound, waitForCompletion: false))
     }
+    
+    
     
     //Centers the title to the button
     fileprivate func centerTitlePosition() -> CGPoint {
@@ -235,7 +278,7 @@ class JKButtonNode: SKSpriteNode {
         self.enabled = enabled
         self.canPlaySounds = canPlay
         self.canChangeState = canChange
-        self.normalSound = sounds.normal
+        self.releasedSounds = sounds.normal
         self.disabledSound = sounds.disabled
     }
     
@@ -250,7 +293,7 @@ class JKButtonNode: SKSpriteNode {
     
     /**Set the sounds to play when button has been pressed or when it can't be pressed.*/
     func setSounds(normalButton: String, andDisabledButton disabledButton: String) {
-        self.normalSound = normalButton
+        self.releasedSounds = normalButton
         self.disabledSound = disabledButton
     }
     
@@ -266,9 +309,13 @@ class JKButtonNode: SKSpriteNode {
     
     /**Set the current state of the button. This will also apply the appropriate background.*/
     func set(state: JKButtonState) {
+        
         switch state {
-        case .normal: self.texture = normalBG
-        case .highlighted: self.texture = highlightedBG
+        case .normal:
+            set(.normal, andBackground: normalBG)
+        case .highlighted:
+            if(highlightedBG != nil) {self.texture = highlightedBG }
+            set(.highlighted, andBackground: highlightedBG)
         case .disabled: self.texture = disabledBG
         }
     }
@@ -280,23 +327,33 @@ class JKButtonNode: SKSpriteNode {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         if enabled {
             if canChangeState {
+                
+                
                 set(state: .highlighted)
+                if canPlaySounds { play(pressedSound) }
+                
             }
         } else if canPlaySounds {
+            
             play(disabledSound)
         }
     }
     
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard !enabled else {
-            if canChangeState { set(state: .highlighted) }
-            
             guard let touch = touches.first else { return }
             let userTouch = touch.location(in: parent!)
             
             //Cancels the touch if the user moved their finger out of the button's frame
             guard !self.contains(userTouch) else { return }
+            
+            if(self.contains(userTouch)) {
+                if canChangeState { set(state: .highlighted) }
+                
+                
+            }
             set(state: .normal)
+            
             isUserInteractionEnabled = false
             isUserInteractionEnabled = true
             return
@@ -312,12 +369,12 @@ class JKButtonNode: SKSpriteNode {
             let userTouch = touch.location(in: parent!)
             
             guard self.contains(userTouch) else { return }
-            if canPlaySounds { play(normalSound) }
+            if canPlaySounds { play(releasedSounds) }
             buttonAction(self)
             return
         }
     }
-
+    
     override func touchesCancelled(_ touches: Set<UITouch>?, with event: UIEvent?) {
         guard enabled else { return }
         set(state: .normal)
